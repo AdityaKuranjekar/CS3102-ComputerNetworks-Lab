@@ -45,4 +45,8 @@ gcc <file>.c -o <file> -lm
 
 ## 👤 Author
 
+**Aditya Kailash Kuranjekar**
+Roll No: **2403CS01**
+5-Year Integrated B.Tech (CSE), IIT Patna + MBA in Digital Business and AI, IIM Bodh Gaya
+
 Computer Networks (CS3102) — Lab Submissions
