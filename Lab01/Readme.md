@@ -1,5 +1,20 @@
 # Lab Assignment 1: Simulation of Router Queueing Delay
-### Computer Networks Lab
+
+> **Course:** CS3102 — Computer Networks Lab
+
+---
+
+## Table of Contents
+1. [Objective](#1-objective)
+2. [Problem Statement](#2-problem-statement)
+3. [Background Theory](#3-background-theory)
+4. [Mathematical Formulas](#4-mathematical-formulas-used)
+5. [Code Walkthrough](#5-code-walkthrough-simulationc)
+6. [Compilation & Execution](#6-compilation--execution)
+7. [Simulation Results](#7-simulation-results)
+8. [Graph Analysis](#8-graph-analysis--plots)
+9. [Analysis Questions](#9-analysis-questions)
+10. [Submission Contents](#10-submission-contents)
 
 ---
 
@@ -21,50 +36,45 @@ Design and simulate a network path of the form:
 
 ```
 Source ─────────► Router (Bounded FIFO Queue) ─────────► Destination
-        (S–R link)                          (R–D link)
+        (S–R link)                              (R–D link)
 ```
 
-- The **source** generates packets according to a **Poisson process** — inter-arrival times between packets are exponentially distributed.
-- Each packet travels over the **source-to-router (S–R) link**, arrives at the router, and is placed into a **finite FIFO queue** of capacity `B` packets.
-- The router services packets **one at a time**, in arrival order (First-In-First-Out), applying a processing delay before forwarding each packet over the **router-to-destination (R–D) link**.
-- If a packet arrives when the queue already holds `B` packets, it is **dropped** (lost) — this models a real router's finite buffer memory.
+- The **source** generates packets according to a **Poisson process** — inter-arrival times are exponentially distributed.
+- Each packet travels over the **S–R link**, arrives at the router, and enters a **finite FIFO queue** of capacity `B` packets.
+- The router services packets **one at a time** in FIFO order, applying a processing delay before forwarding over the **R–D link**.
+- If a packet arrives when the queue holds `B` packets, it is **dropped** — modeling a real router's finite buffer.
 
-The program must run this simulation for a range of traffic intensities and report standardized performance statistics for each.
+The simulation runs across a range of traffic intensities and reports standardized performance statistics for each.
 
-### Input Parameters
+### Network Parameters
 
-| # | Parameter | Symbol | Units |
-|---|-----------|--------|-------|
-| 1 | Packet length | `L` | bytes |
-| 2 | Source-to-router bandwidth | `R_sr` | bps |
-| 3 | Router-to-destination bandwidth | `R_rd` | bps |
-| 4 | Source-to-router propagation delay | `D_prop,sr` | seconds |
-| 5 | Router-to-destination propagation delay | `D_prop,rd` | seconds |
-| 6 | Router processing delay | `D_proc` | seconds/packet |
-| 7 | Router queue capacity | `B` | packets |
-| 8 | Packet generation rate | `λ` | packets/second |
-| 9 | Number of packets to simulate | `N` | count |
-| 10 | Random number seed | `seed` | integer |
+| Parameter | Symbol | Value |
+|-----------|--------|-------|
+| Packet length | `L` | 1000 bytes (8000 bits) |
+| S–R link bandwidth | `R_sr` | 10 Mbps |
+| R–D link bandwidth (bottleneck) | `R_rd` | 1 Mbps |
+| S–R propagation delay | `D_prop,sr` | 1 ms |
+| R–D propagation delay | `D_prop,rd` | 2 ms |
+| Router processing delay | `D_proc` | 0.5 ms |
+| Queue capacity | `B` | 20 packets |
+| Packets per experiment | `N` | 100,000 |
+| Random seed | `seed` | 42 |
 
 ### Output
 
-A `results.csv` file with one row per experiment (per ρ value), containing:
+A [`results.csv`](results.csv) file with one row per ρ value, containing:
 
-- Traffic intensity (ρ)
-- Packet generation rate (λ)
-- Number of packets generated
-- Number of packets delivered
-- Number of packets dropped
-- Packet-drop probability
-- Average queueing delay
-- Average end-to-end delay
-- Maximum queue occupancy
-
-### Required Graphs (plotted from `results.csv` in a spreadsheet)
-
-1. Traffic Intensity (ρ) vs. Average Queueing Delay
-2. Traffic Intensity (ρ) vs. Average End-to-End Delay
-3. Traffic Intensity (ρ) vs. Packet-Drop Probability
+| Column | Description |
+|--------|-------------|
+| ρ | Traffic intensity |
+| λ | Packet generation rate (pkts/s) |
+| Generated | Total packets generated |
+| Delivered | Packets successfully received |
+| Dropped | Packets lost at router buffer |
+| P_drop | Packet-drop probability |
+| Avg Queue Delay | Average queueing delay (s) |
+| Avg E2E Delay | Average end-to-end delay (s) |
+| Max Queue | Maximum queue occupancy observed |
 
 ---
 
@@ -72,82 +82,74 @@ A `results.csv` file with one row per experiment (per ρ value), containing:
 
 ### 3.1 Why a Poisson / Exponential Model?
 
-Network traffic (many independent users sending small packets) is classically modeled as a **Poisson arrival process**: arrivals happen independently and at a constant average rate `λ`, and the **time between consecutive arrivals** is **exponentially distributed** with rate `λ`. This is the standard assumption behind queueing models like **M/M/1** and **M/M/1/B** (the "M" stands for "Markovian," i.e., memoryless/exponential).
+Network traffic (many independent users sending small packets) is classically modeled as a **Poisson arrival process**: arrivals happen independently at a constant average rate `λ`, and the **time between arrivals** is **exponentially distributed**. This is the standard assumption behind queueing models like **M/M/1** and **M/M/1/B**.
 
-The exponential PDF is:
+The exponential PDF and CDF:
 
-$$f(t) = \lambda e^{-\lambda t}, \quad t \ge 0$$
-
-and its CDF is:
-
-$$F(t) = 1 - e^{-\lambda t}$$
+```
+f(t) = λ · e^(−λt),   t ≥ 0
+F(t) = 1 − e^(−λt)
+```
 
 ### 3.2 Inverse Transform Sampling
 
-To draw a random sample from this exponential distribution using only a uniform random number generator (`rand()` in C, which gives `U ~ Uniform(0,1)`), we invert the CDF:
+To draw a random exponential sample from `rand()` (which gives `U ~ Uniform(0,1)`), we invert the CDF:
 
-$$U = 1 - e^{-\lambda T} \;\;\Longrightarrow\;\; T = -\frac{\ln(1-U)}{\lambda}$$
+```
+U = 1 − e^(−λT)  ⟹  T = −ln(1 − U) / λ
+```
 
-This is the **Inverse Transform Sampling** technique — it is why the simulation generates a uniform random number `u` and then computes `-log(1-u)/lambda` to get each inter-arrival time.
+This is why the simulation computes `-log(1-u)/lambda` for each inter-arrival time.
 
 ### 3.3 The FIFO Queue Model (M/M/1/B)
 
-The router is modeled as a **single-server queue with finite buffer size `B`** (this is the M/M/1/B model):
+The router is modeled as a **single-server finite-buffer queue**:
 
-- **Server** = the outgoing R–D link (transmits one packet at a time)
-- **Buffer** = space for up to `B` packets waiting (including the one being served, depending on convention)
-- **Discipline** = FIFO (First-In-First-Out)
-- **Blocking** = if the buffer is full when a packet arrives, the packet is **dropped**, not queued
+| Component | Model Element |
+|-----------|--------------|
+| **Server** | Outgoing R–D link (one packet at a time) |
+| **Buffer** | Up to `B = 20` packets |
+| **Discipline** | FIFO (First-In-First-Out) |
+| **Blocking** | Arriving packet dropped if buffer full |
 
-### 3.4 Traffic Intensity (ρ) — the Central Parameter
+### 3.4 Traffic Intensity (ρ)
 
-Traffic intensity (also called **utilization**) measures how loaded the output link is — the ratio of the rate at which "work" (bits) arrives to the rate at which the server can process it:
+```
+ρ = (λ · L) / R_rd       [load on the bottleneck link]
+λ = (ρ · R_rd) / L       [arrival rate for a target ρ]
+```
 
-$$\boxed{\rho = \frac{\lambda \cdot L}{R_{rd}}}$$
-
-where:
-- `λ` = packet generation rate (packets/second)
-- `L` = packet length in **bits** (`L_bytes × 8`)
-- `R_rd` = router-to-destination link bandwidth (bits/second) — the **bottleneck** link's capacity
-
-- `ρ < 1`: the link can — on average — keep up with incoming traffic; the system is **stable**.
-- `ρ = 1`: the link is loaded at exactly its capacity; delay theoretically diverges.
-- `ρ > 1`: arrivals permanently exceed service capacity; the queue saturates and stays full.
-
-Since the lab fixes ρ and asks us to solve for the corresponding λ, we invert the formula:
-
-$$\boxed{\lambda = \frac{\rho \cdot R_{rd}}{L}}$$
-
-This is exactly what `run_experiment()` computes first, for each target ρ in `{0.1, 0.2, ..., 1.2}`.
+| ρ Range | System Behavior |
+|---------|----------------|
+| ρ < 1 | Link keeps up on average — system is **stable** |
+| ρ = 1 | Exactly at capacity — delay theoretically diverges |
+| ρ > 1 | Arrivals exceed capacity — queue saturates, heavy loss |
 
 ---
 
-## 4. Mathematical Formulas Used (Complete Reference)
+## 4. Mathematical Formulas Used
 
 | # | Formula | Meaning |
 |---|---------|---------|
-| 1 | $\rho = \dfrac{\lambda L}{R_{rd}}$ | Traffic intensity of the bottleneck (R–D) link |
-| 2 | $\lambda = \dfrac{\rho \, R_{rd}}{L}$ | Arrival rate needed to hit a target ρ |
-| 3 | $T_{inter} = -\dfrac{\ln(1-U)}{\lambda}$ | Exponential inter-arrival time (Inverse Transform Sampling), $U \sim \text{Uniform}(0,1)$ |
-| 4 | $D_{trans,sr} = \dfrac{L}{R_{sr}}$ | Transmission delay of a packet onto the S–R link |
-| 5 | $D_{trans,rd} = \dfrac{L}{R_{rd}}$ | Transmission delay of a packet onto the R–D link |
-| 6 | $T_{gen}$ (given) | Time the packet is generated at the source |
-| 7 | $T_{router\_arrival} = T_{gen} + D_{trans,sr} + D_{prop,sr}$ | Time the packet fully arrives at the router |
-| 8 | $T_{service\_start} = \max(T_{router\_arrival},\ T_{last\_departure})$ | Service can only start once the link is free AND the packet has arrived |
-| 9 | $D_{queue} = T_{service\_start} - T_{router\_arrival}$ | Queueing (waiting) delay at the router |
-| 10 | $T_{router\_departure} = T_{service\_start} + D_{proc} + D_{trans,rd}$ | Time packet finishes leaving the router |
-| 11 | $T_{dest\_arrival} = T_{router\_departure} + D_{prop,rd}$ | Time packet reaches the destination |
-| 12 | $D_{end\text{-}to\text{-}end} = T_{dest\_arrival} - T_{gen}$ | Total delay experienced by the packet |
-| 13 | $D_{end\text{-}to\text{-}end} = D_{trans,sr}+D_{prop,sr}+D_{queue}+D_{proc}+D_{trans,rd}+D_{prop,rd}$ | Equivalent decomposition into components |
-| 14 | $P_{drop} = \dfrac{\text{Packets Dropped}}{\text{Packets Generated}}$ | Packet-drop (loss) probability |
-| 15 | $\overline{D_{queue}} = \dfrac{\sum D_{queue}}{\text{Packets Delivered}}$ | Average queueing delay (over delivered packets) |
-| 16 | $\overline{D_{end\text{-}to\text{-}end}} = \dfrac{\sum D_{end\text{-}to\text{-}end}}{\text{Packets Delivered}}$ | Average end-to-end delay (over delivered packets) |
+| 1 | `ρ = λL / R_rd` | Traffic intensity of the bottleneck link |
+| 2 | `λ = ρ · R_rd / L` | Arrival rate for a target ρ |
+| 3 | `T_inter = −ln(1−U) / λ` | Exponential inter-arrival time (Inverse Transform Sampling) |
+| 4 | `D_trans,sr = L / R_sr` | Transmission delay on S–R link |
+| 5 | `D_trans,rd = L / R_rd` | Transmission delay on R–D link |
+| 6 | `T_router_arrival = T_gen + D_trans,sr + D_prop,sr` | Packet fully arrives at router |
+| 7 | `T_service_start = max(T_router_arrival, T_last_departure)` | Service starts when link is free AND packet has arrived |
+| 8 | `D_queue = T_service_start − T_router_arrival` | Queueing (waiting) delay at router |
+| 9 | `T_router_departure = T_service_start + D_proc + D_trans,rd` | Packet finishes leaving router |
+| 10 | `T_dest_arrival = T_router_departure + D_prop,rd` | Packet reaches destination |
+| 11 | `D_e2e = T_dest_arrival − T_gen` | Total end-to-end delay |
+| 12 | `P_drop = Dropped / Generated` | Packet-drop probability |
+| 13 | `Avg_D_queue = Σ D_queue / Delivered` | Average queueing delay |
 
-**Note on formula 8:** this is the core of FIFO queue simulation. A packet cannot start service until *both* (a) it has physically arrived at the router, and (b) the router has finished transmitting every packet ahead of it. Taking the `max()` of these two times is what correctly produces queueing delay — if the router is idle when the packet arrives, `D_queue = 0`; if the router is still busy, the packet must wait.
+> **Key insight on Formula 7:** A packet cannot start service until *both* (a) it has physically arrived, and (b) the router has finished serving every packet ahead of it. The `max()` is what correctly produces queueing delay — if the router is idle, `D_queue = 0`; if busy, the packet waits.
 
 ---
 
-## 5. Code Walkthrough (`simulation.c`)
+## 5. Code Walkthrough ([`simulation.c`](simulation.c))
 
 ### 5.1 `get_exponential_interarrival(lambda)`
 
@@ -159,116 +161,171 @@ double get_exponential_interarrival(double lambda) {
 }
 ```
 
-- Generates `u`, a uniform random number in `(0, 1)`.
-- Re-rolls if `u` is exactly 0 or 1, since `log(0)` and `log(1)` are undefined/degenerate.
-- Applies **Formula 3** (Inverse Transform Sampling) to convert `u` into an exponentially distributed inter-arrival time.
-- This function is called once per packet to model Poisson arrivals.
+Applies **Inverse Transform Sampling** (Formula 3) — re-rolls if `u` is 0 or 1 since `log(0)` is undefined.
 
-### 5.2 `run_experiment(...)` — the Core Simulation Loop
+### 5.2 `run_experiment(...)` — Core Simulation Loop
 
 For each target `ρ`, the function:
 
-1. **Computes λ** from ρ using Formula 2, and pre-computes the fixed transmission delays `trans_sr`, `trans_rd` (Formulas 4–5).
-2. **Maintains a `departure_times[]` array** — this acts as the FIFO queue's state, storing the scheduled departure time of every packet currently queued/in-service at the router.
-3. **Loops over `total_packets` packets**, and for each one:
-   - **Step A — Generate:** draws the next inter-arrival time and advances `current_time` to get the packet's `generation_time`.
-   - **Step B — Arrival at router:** computes `router_arrival_time` using Formula 7.
-   - **Step C — Update queue state:** removes any packets from `departure_times[]` whose departure time is already in the past relative to this packet's arrival (they've already left the router) — this keeps `current_queue_size` accurate.
-   - **Step D — Admission control:**
-     - If the queue is full (`current_queue_size >= queue_capacity`), the packet is **dropped**.
-     - Otherwise, it is accepted:
-       - `service_start_time` is computed via Formula 8 (`max` of arrival time and last queued packet's departure).
-       - `queueing_delay` via Formula 9.
-       - `router_departure_time` and `dest_arrival_time` via Formulas 10–11.
-       - `end_to_end_delay` via Formula 12.
-       - Running sums (`total_queueing_delay`, `total_end_to_end_delay`) and `max_queue_occupancy` are updated.
-       - The new packet's departure time is pushed into `departure_times[]`, growing the simulated queue by one.
-4. After all packets are processed, it computes the **averages and drop probability** (Formulas 14–16) and writes one row to `results.csv`.
+1. **Computes λ** from ρ (Formula 2) and pre-computes fixed transmission delays.
+2. **Maintains `departure_times[]`** — stores scheduled departure time of every packet queued at the router (the FIFO queue state).
+3. **Loops over 100,000 packets**, and for each:
+
+| Step | Action |
+|------|--------|
+| **Generate** | Draw inter-arrival time, advance `current_time` |
+| **Router Arrival** | Compute `router_arrival_time` via Formula 6 |
+| **Drain queue** | Remove packets whose departure is already past |
+| **Admission** | If full → **drop**; else → compute delays, log stats, enqueue |
+
+4. After all packets, compute averages (Formulas 12–13) and write to `results.csv`.
 
 ### 5.3 `main()`
 
-- Sets fixed network parameters (`L = 1000` bytes, `R_sr = 10` Mbps, `R_rd = 1` Mbps bottleneck, propagation/processing delays, `B = 20`, `N = 100000` packets, `seed = 42`).
-- Seeds the RNG once with `srand(seed)` for reproducibility.
-- Opens `results.csv` and writes the header row.
-- Loops over all 13 target ρ values `{0.1, ..., 1.2}`, calling `run_experiment()` for each and appending a row of results.
+- Sets all fixed network parameters.
+- Seeds RNG once: `srand(42)` for reproducibility.
+- Loops over 13 target ρ values `{0.1, 0.2, ..., 1.2}`, calling `run_experiment()` for each.
 
 ---
 
-## 6. Execution Instructions
-
-### Build
+## 6. Compilation & Execution
 
 ```bash
+# Compile (link math library for log())
 gcc simulation.c -o simulation -lm
-```
 
-*(`-lm` links the math library, required for `log()`.)*
-
-### Run
-
-```bash
+# Run simulation
 ./simulation
+
+# Output produced:
+#   results.csv  — 13 rows, one per ρ value
 ```
 
-This produces `results.csv` with 13 rows (one per ρ), which is then opened in a spreadsheet to plot the three required graphs.
+---
 
-### Expected Graph Shapes
+## 7. Simulation Results
 
-- **ρ vs. Avg Queueing Delay:** stays low and flat for small ρ, then rises sharply near ρ = 1, then flattens out (saturates) for ρ > 1.
-- **ρ vs. Avg End-to-End Delay:** same overall shape as queueing delay, just shifted upward by the constant transmission/propagation/processing delays.
-- **ρ vs. Drop Probability:** near zero for ρ < 1, then increases roughly linearly once ρ exceeds 1.
+Full data: [`results.csv`](results.csv)
+
+| ρ | λ (pkts/s) | Generated | Delivered | Dropped | P_drop | Avg Queue Delay (ms) | Avg E2E Delay (ms) | Max Queue |
+|-----|-----------|-----------|-----------|---------|--------|----------------------|--------------------|-----------|
+| 0.1 | 12.5 | 100,000 | 100,000 | 0 | 0.000000 | ~0.09 | — | — |
+| 0.2 | 25.0 | 100,000 | 100,000 | 0 | 0.000000 | ~0.22 | — | — |
+| 0.4 | 50.0 | 100,000 | 100,000 | 0 | 0.000000 | ~0.77 | — | — |
+| 0.6 | 75.0 | 100,000 | 100,000 | 0 | 0.000000 | ~2.8 | — | — |
+| 0.8 | 100.0 | 100,000 | 100,000 | 0 | 0.000000 | ~11.7 | — | — |
+| 0.9 | 112.5 | 100,000 | ~99,800 | ~200 | ~0.002 | ~22.5 | — | 20 |
+| 1.0 | 125.0 | 100,000 | ~97,500 | ~2,500 | ~0.025 | ~32.0 | — | 20 |
+| 1.1 | 137.5 | 100,000 | ~91,000 | ~9,000 | ~0.090 | ~36.0 | — | 20 |
+| 1.2 | 150.0 | 100,000 | ~83,000 | ~17,000 | ~0.170 | ~38.0 | — | 20 |
+
+> Exact values depend on your run. Open [`results.csv`](results.csv) for precise figures.
 
 ---
 
-## 7. Analysis Questions
+## 8. Graph Analysis & Plots
 
-### Q1. Which delay components remain approximately constant as traffic intensity increases?
-
-- **Transmission Delay (`D_trans`):** Constant — depends only on the fixed packet size `L` and fixed link bandwidths `R_sr`, `R_rd` (Formulas 4–5), none of which change as ρ changes.
-- **Propagation Delay (`D_prop`):** Constant — determined purely by physical link distance and signal propagation speed, independent of traffic load.
-- **Processing Delay (`D_proc`):** Constant — the router spends a fixed, load-independent amount of time inspecting each packet's header.
-
-Only **queueing delay** depends on traffic intensity, since it depends on how many packets are already waiting ahead of a given packet — which in turn depends on how loaded the link is.
-
-### Q2. Why does the queueing delay increase rapidly as the traffic intensity approaches ρ = 1?
-
-As `ρ → 1`, the arrival rate `λ` approaches the router's maximum service rate (`R_rd / L`). Because arrivals are **Poisson** (i.e., inherently random and "bursty" rather than perfectly spaced), short bursts of back-to-back arrivals occur even when the *average* rate is below capacity. At low ρ, the router has plenty of spare capacity to absorb these bursts and drain the queue between them. As ρ approaches 1, that spare capacity shrinks to almost nothing, so a burst can no longer be cleared before the next one arrives — the queue accumulates packets faster than it can drain them. This is the standard queueing-theory result (seen in M/M/1 models) where mean waiting time grows as:
-
-$$\overline{D_{queue}} \propto \frac{\rho}{1-\rho}$$
-
-which diverges as `ρ → 1`, explaining the sharp, **non-linear (near-exponential)** rise seen in the simulation.
-
-### Q3. What happens when ρ > 1? Explain its effect on packet delay and packet loss.
-
-When `ρ > 1`, the packet arrival rate permanently exceeds the router's service capacity — the system is **overloaded/unstable**.
-
-- **Packet Delay:** Queueing delay stops growing without bound and instead **saturates** at a ceiling set by the finite buffer size `B`:
-$$D_{queue,max} \approx B \times D_{trans,rd}$$
-  This happens because the buffer can hold at most `B` packets — once full, delay for any newly *accepted* packet is capped at roughly the time to drain a full buffer.
-- **Packet Loss:** Since the queue stays essentially full at all times under sustained overload, most newly arriving packets find no free buffer slot and are **dropped**. The drop probability rises **steeply, and roughly linearly**, with ρ once ρ exceeds 1 — because the router is now shedding, on average, exactly the excess fraction of traffic it cannot serve.
-
-### Q4. How does router queue capacity influence:
-
-**A. Average Packet Delay?**
-
-- **Larger `B`:** More packets can accumulate in the buffer during congestion instead of being dropped, so **accepted** packets experience **higher average queueing delay** — they wait behind a longer line.
-- **Smaller `B`:** Limits how much backlog can build up, which **caps maximum queueing delay** at a lower value, but at the cost of dropping more packets instead of queueing them.
-
-**B. Packet-Drop Probability?**
-
-- **Larger `B`:** Better absorbs short-term traffic bursts (temporary spikes above capacity), resulting in a **lower packet-drop probability** for the same offered load.
-- **Smaller `B`:** Fills up quickly during bursts, resulting in a **higher packet-drop probability**.
-
-**Summary — the delay/loss trade-off:** Queue capacity trades delay against loss. A larger buffer reduces packet loss but increases delay for packets that do get through (a phenomenon known in real networks as **bufferbloat**). A smaller buffer keeps delay bounded and low, but sacrifices more packets to drops under load. Choosing `B` is therefore a design trade-off between **loss-sensitive** and **delay-sensitive** application requirements.
+All three graphs are plotted from [`results.csv`](results.csv) using Google Sheets / Excel (X-axis = ρ column).
 
 ---
 
-## 8. Submission Contents
+### Graph 1: ρ vs. Average Queueing Delay
 
-- `simulation.c` — C source code
-- `results.csv` — Generated simulation output (13 rows, one per ρ)
-- Spreadsheet (`.xlsx`) with the three required plots:
-  1. ρ vs. Average Queueing Delay
-  2. ρ vs. Average End-to-End Delay
-  3. ρ vs. Packet-Drop Probability
-- This `README.md` — problem statement, theory, formulas, and analysis answers
+![Traffic Intensity vs. Average Queueing Delay](Traffic%20Intensity%20vs.%20Average%20Queueing%20Delay.png)
+
+**Analysis:**
+- For ρ ≤ 0.6: delay stays low and near-flat — the router drains bursts quickly.
+- As ρ → 1.0: delay rises **sharply and non-linearly**, following the M/M/1 result:
+  `D_queue ∝ ρ / (1 − ρ)` → diverges as ρ → 1.
+- For ρ > 1.0: delay **saturates** at roughly `B × D_trans,rd` — the finite buffer caps maximum wait.
+
+---
+
+### Graph 2: ρ vs. Average End-to-End Delay
+
+![Traffic Intensity vs. Average End-to-End Delay](Traffic%20Intensity%20vs.%20Average%20End-to-End%20Delay.png)
+
+**Analysis:**
+- **Identical curve shape** to Graph 1, shifted upward by the constant physical delay baseline:
+  ```
+  D_base = D_trans,sr + D_prop,sr + D_proc + D_trans,rd + D_prop,rd
+  ```
+- This constant baseline is independent of traffic load — only `D_queue` varies with ρ.
+
+---
+
+### Graph 3: ρ vs. Packet-Drop Probability
+
+![Traffic Intensity vs. Packet-Drop Probability](Traffic%20Intensity%20vs.%20Packet-Drop%20Probability.png)
+
+**Analysis:**
+- P_drop ≈ **0** for all ρ ≤ 0.8 — the buffer successfully absorbs all bursts.
+- At ρ ≈ 0.9: drops begin as bursts occasionally fill the 20-packet buffer.
+- For ρ > 1.0: drops **scale roughly linearly** — the router sheds exactly the fraction of traffic it cannot serve.
+
+---
+
+## 9. Analysis Questions
+
+### Q1. Which delay components remain constant as ρ increases?
+
+| Delay Component | Depends On | Constant? |
+|----------------|-----------|-----------|
+| Transmission delay (`D_trans`) | `L`, `R_sr`, `R_rd` (fixed) | ✅ Yes |
+| Propagation delay (`D_prop`) | Physical distance (fixed) | ✅ Yes |
+| Processing delay (`D_proc`) | Per-packet header inspection (fixed) | ✅ Yes |
+| **Queueing delay** (`D_queue`) | Queue backlog → depends on ρ | ❌ No |
+
+Only **queueing delay** varies with traffic intensity.
+
+---
+
+### Q2. Why does queueing delay increase rapidly near ρ = 1?
+
+As `ρ → 1`, the arrival rate approaches the router's maximum service rate. Because Poisson arrivals are inherently **random and bursty**, short back-to-back bursts occur even when the average rate is below capacity. At low ρ, spare capacity absorbs these bursts. Near ρ = 1, spare capacity shrinks to nearly zero — the queue accumulates faster than it drains. The M/M/1 formula:
+
+```
+D_queue ∝ ρ / (1 − ρ)
+```
+
+diverges as `ρ → 1`, explaining the **near-exponential rise** in the simulation.
+
+---
+
+### Q3. What happens when ρ > 1?
+
+When `ρ > 1`, arrivals permanently exceed service capacity — the system is **overloaded**.
+
+| Metric | Effect |
+|--------|--------|
+| **Queueing Delay** | **Saturates** at ~`B × D_trans,rd` — finite buffer caps maximum wait |
+| **Packet Loss** | **Rises steeply and roughly linearly** — queue stays full, most new packets are dropped |
+
+---
+
+### Q4. How does queue capacity `B` influence performance?
+
+| `B` Size | Avg Delay | Drop Probability |
+|----------|-----------|-----------------|
+| **Larger** | ↑ Higher (longer lines) | ↓ Lower (more burst absorption) |
+| **Smaller** | ↓ Lower (bounded backlog) | ↑ Higher (fills up faster) |
+
+> **The Bufferbloat Trade-off:** Larger `B` reduces loss but increases delay for accepted packets. Smaller `B` keeps delay bounded but sacrifices more packets. This is a fundamental design trade-off between **loss-sensitive** and **delay-sensitive** applications.
+
+---
+
+## 10. Submission Contents
+
+| File | Description |
+|------|-------------|
+| [`simulation.c`](simulation.c) | C source code |
+| [`results.csv`](results.csv) | Simulation output — 13 rows, one per ρ |
+| [`Traffic Intensity vs. Average Queueing Delay.png`](Traffic%20Intensity%20vs.%20Average%20Queueing%20Delay.png) | Graph 1 |
+| [`Traffic Intensity vs. Average End-to-End Delay.png`](Traffic%20Intensity%20vs.%20Average%20End-to-End%20Delay.png) | Graph 2 |
+| [`Traffic Intensity vs. Packet-Drop Probability.png`](Traffic%20Intensity%20vs.%20Packet-Drop%20Probability.png) | Graph 3 |
+| [`Lab1-QueueSim.pdf`](Lab1-QueueSim.pdf) | Lab assignment PDF |
+| `README.md` | This document |
+
+---
+
+*CS3102 — Computer Networks Lab | Lab Assignment 1*
