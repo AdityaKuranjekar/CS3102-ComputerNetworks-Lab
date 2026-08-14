@@ -1,0 +1,5 @@
+Distribution,Traffic Intensity (rho),Aggregate Packet Rate (lambda),Packets Generated,Packets Delivered,Packets Dropped,Packet-Drop Probability,Avg Queueing Delay (s),Avg End-to-End Delay (s),Max Queue Occupancy
+"(100, 100, 100, 700)",0.80,1000.00,100000,99998,2,0.000020,0.001586,0.006286,20
+"(150, 150, 250, 450)",0.80,1000.00,100000,99997,3,0.000030,0.001607,0.006307,20
+"(250, 250, 250, 250)",0.80,1000.00,100000,100000,0,0.000000,0.001572,0.006272,19
+"(400, 300, 200, 100)",0.80,1000.00,100000,99997,3,0.000030,0.001591,0.006291,20
